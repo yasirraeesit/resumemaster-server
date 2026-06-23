@@ -1,4 +1,5 @@
 import pdfParse from 'pdf-parse';
+import Resume from '../models/Resume.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -284,19 +285,26 @@ export const parseResume = async (req, res) => {
 /**
  * Endpoint: Get all saved resumes
  */
-export const getResumes = (req, res) => {
+export const getResumes = async (req, res) => {
   try {
-    const fileData = fs.readFileSync(DB_FILE, 'utf8');
-    res.json(JSON.parse(fileData));
+    const userResumes = await Resume.find({ userId: req.userId }).sort({ updatedAt: -1 });
+    // Map _id to id for client convenience
+    const mapped = userResumes.map(r => ({
+      id: r._id,
+      title: r.title,
+      data: r.data,
+      updatedAt: r.updatedAt
+    }));
+    res.json(mapped);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve resumes.' });
+    res.status(500).json({ error: 'Failed to retrieve resumes. ' + error.message });
   }
 };
 
 /**
  * Endpoint: Save / update a resume
  */
-export const saveResume = (req, res) => {
+export const saveResume = async (req, res) => {
   try {
     const { id, title, data } = req.body;
     
@@ -304,25 +312,37 @@ export const saveResume = (req, res) => {
       return res.status(400).json({ error: 'Title and data are required.' });
     }
 
-    const fileData = fs.readFileSync(DB_FILE, 'utf8');
-    const resumes = JSON.parse(fileData);
-
-    const newResume = {
-      id: id || Date.now().toString(),
-      title,
-      data,
-      updatedAt: new Date().toISOString()
-    };
-
-    const existingIndex = resumes.findIndex(r => r.id === newResume.id);
-    if (existingIndex > -1) {
-      resumes[existingIndex] = newResume;
+    let resume;
+    if (id) {
+      resume = await Resume.findById(id);
+      if (!resume) {
+        return res.status(404).json({ error: 'Resume not found.' });
+      }
+      if (resume.userId.toString() !== req.userId) {
+        return res.status(403).json({ error: 'Unauthorized to modify this resume.' });
+      }
+      resume.title = title;
+      resume.data = data;
+      resume.updatedAt = new Date();
     } else {
-      resumes.push(newResume);
+      resume = new Resume({
+        userId: req.userId,
+        title,
+        data
+      });
     }
 
-    fs.writeFileSync(DB_FILE, JSON.stringify(resumes, null, 2));
-    res.json({ success: true, resume: newResume });
+    await resume.save();
+    
+    res.json({
+      success: true,
+      resume: {
+        id: resume._id,
+        title: resume.title,
+        data: resume.data,
+        updatedAt: resume.updatedAt
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to save resume. ' + error.message });
   }
@@ -331,17 +351,118 @@ export const saveResume = (req, res) => {
 /**
  * Endpoint: Delete a resume
  */
-export const deleteResume = (req, res) => {
+export const deleteResume = async (req, res) => {
   try {
     const { id } = req.params;
-    const fileData = fs.readFileSync(DB_FILE, 'utf8');
-    const resumes = JSON.parse(fileData);
+    const resume = await Resume.findById(id);
 
-    const filtered = resumes.filter(r => r.id !== id);
-    fs.writeFileSync(DB_FILE, JSON.stringify(filtered, null, 2));
+    if (!resume) {
+      return res.status(404).json({ error: 'Resume not found.' });
+    }
+
+    if (resume.userId.toString() !== req.userId) {
+      return res.status(403).json({ error: 'Unauthorized to delete this resume.' });
+    }
+
+    await Resume.findByIdAndDelete(id);
 
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete resume.' });
+    res.status(500).json({ error: 'Failed to delete resume. ' + error.message });
+  }
+};
+
+/**
+ * ATS Resume Score Engine — powered by Gemini 2.5 Flash
+ * Scores a resume against a specific job description on 5 dimensions
+ */
+export const scoreResumeATS = async (req, res) => {
+  const { resumeText, jobDescription } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '') {
+    return res.status(400).json({ error: 'Gemini API Key is not configured on the server.' });
+  }
+  if (!resumeText || resumeText.trim() === '') {
+    return res.status(400).json({ error: 'Resume text is required.' });
+  }
+  if (!jobDescription || jobDescription.trim() === '') {
+    return res.status(400).json({ error: 'Job description is required to score against.' });
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `
+You are a world-class Applicant Tracking System (ATS) and resume coach. Analyze the candidate's resume against the target job description.
+
+Candidate Resume:
+"""
+${resumeText}
+"""
+
+Target Job Description:
+"""
+${jobDescription}
+"""
+
+Task — Evaluate the resume on 5 dimensions and return a structured JSON report:
+
+1. **overallScore** (0–100): Holistic ATS compatibility score.
+2. **keywordMatchPercent** (0–100): Percentage of critical JD keywords/phrases found in resume.
+3. **foundKeywords**: Array of important JD keywords that ARE present in the resume (max 12).
+4. **missingKeywords**: Array of important JD keywords that are MISSING from the resume (max 10).
+5. **sectionScores**: Object with scores (0–100) for: summary, experience, skills, education, formatting.
+6. **fixes**: Array of 4–6 specific, actionable suggestions to improve the resume for this JD (be precise, e.g. "Add 'Kubernetes' to your skills section — it appears 4x in the JD").
+7. **verdict**: One of "Strong Match", "Moderate Match", or "Weak Match".
+
+Return ONLY the JSON object. No markdown code blocks.
+
+JSON Schema:
+{
+  "overallScore": 78,
+  "keywordMatchPercent": 65,
+  "verdict": "Moderate Match",
+  "foundKeywords": ["React", "TypeScript", "REST APIs"],
+  "missingKeywords": ["Kubernetes", "GraphQL", "CI/CD"],
+  "sectionScores": {
+    "summary": 80,
+    "experience": 75,
+    "skills": 70,
+    "education": 90,
+    "formatting": 85
+  },
+  "fixes": [
+    "Add 'Kubernetes' and 'Docker' to your skills section — they appear 5 times in the JD.",
+    "Quantify your impact in the TechCorp role — add metrics like team size, revenue, or % improvements.",
+    "Your summary does not mention 'cloud infrastructure' which is a core JD requirement."
+  ]
+}
+`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini API Error: ${response.status} - ${errText}`);
+    }
+
+    const resJson = await response.json();
+    const textOutput = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textOutput) throw new Error('Empty Gemini response.');
+
+    const result = JSON.parse(textOutput.trim());
+    console.log('[Server] ATS Score generated:', result.overallScore);
+    res.json(result);
+  } catch (error) {
+    console.error('ATS scoring failed:', error);
+    res.status(500).json({ error: 'Failed to score resume: ' + error.message });
   }
 };

@@ -187,3 +187,57 @@ JSON Schema output:
     res.status(500).json({ error: 'Failed to generate interview prep materials: ' + error.message });
   }
 };
+
+/**
+ * Endpoint: Evaluate mock interview user response with Speech AI
+ */
+export const evaluateInterviewAnswer = async (req, res) => {
+  const { question, userAnswer, resumeText } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '') {
+    return res.status(400).json({ error: 'Gemini API Key is not configured on the server.' });
+  }
+
+  if (!question || !userAnswer) {
+    return res.status(400).json({ error: 'Question and User Answer are required.' });
+  }
+
+  try {
+    const prompt = `
+You are an expert career coach and technical interviewer. Evaluate the candidate's spoken response to the interview question below.
+
+Question Asked:
+"${question}"
+
+Candidate Spoken Answer:
+"${userAnswer}"
+
+Candidate Resume Profile (for background context):
+"${resumeText || ''}"
+
+Task:
+1. Grade the candidate's answer out of 100 based on accuracy, relevance, communication clarity, and whether they included measurable metrics.
+2. Outline specific strengths in their answer.
+3. Outline key weaknesses and gaps (e.g. "You failed to explain the outcome of your action" or "Define the technical details of the framework").
+4. Provide a sample model response showing how a top-tier candidate would answer this question using the STAR method.
+5. Return ONLY the JSON object matching the schema below. Do not wrap in markdown tags.
+
+JSON Schema output:
+{
+  "score": 85,
+  "strengths": "Outline of key strengths (bulleted list)",
+  "weaknesses": "Outline of key weaknesses / areas for improvement (bulleted list)",
+  "modelAnswer": "A high-performance mock answer utilizing the STAR method."
+}
+`;
+
+    console.log('[Server] Evaluating mock interview answer with Gemini...');
+    const result = await callGemini(prompt, apiKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Gemini mock interview evaluation failed:', error);
+    res.status(500).json({ error: 'Failed to evaluate interview answer: ' + error.message });
+  }
+};
+

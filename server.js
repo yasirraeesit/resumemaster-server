@@ -1,16 +1,25 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import authRoutes from './routes/authRoutes.js';
 import resumeRoutes from './routes/resumeRoutes.js';
 import matcherRoutes from './routes/matcherRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
+import documentRoutes from './routes/documentRoutes.js';
 
 // Load environment configurations from .env file
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Connect to MongoDB
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/resumemaster';
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('[Database] Connected to MongoDB locally (Compass ready)'))
+  .catch(err => console.error('[Database Connection Error]:', err.message));
 
 // Middleware configurations
 app.use(cors());
@@ -22,10 +31,12 @@ app.get('/health', (req, res) => {
 });
 
 // Route registration
+app.use('/api', authRoutes);
 app.use('/api', resumeRoutes);
 app.use('/api', matcherRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', careerRoutes);
+app.use('/api', documentRoutes);
 
 // Global Error Handler Middleware
 app.use((err, req, res, next) => {
