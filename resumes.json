@@ -1,0 +1,80 @@
+[
+  {
+    "id": "1782121508136",
+    "title": "v1",
+    "data": {
+      "personalInfo": {
+        "fullName": "John Doe",
+        "title": "Senior Full Stack Software Engineer",
+        "email": "john.doe@email.com",
+        "phone": "(555) 123-4567",
+        "location": "San Francisco, CA",
+        "website": "https://johndoe.dev",
+        "github": "https://github.com/johndoe",
+        "linkedin": "https://linkedin.com/in/johndoe"
+      },
+      "summary": "Results-driven Software Engineer with 6+ years of experience designing, building, and deploying scalable web applications. Expert in React, Node.js, and TypeScript, with a proven track record of optimizing system performance and improving user engagement by 25%. Strong background in cloud architecture, CI/CD, and agile development methodologies.",
+      "skills": [
+        "JavaScript (ES6+)",
+        "TypeScript",
+        "React",
+        "Next.js",
+        "Node.js",
+        "Express.js",
+        "Python",
+        "SQL",
+        "PostgreSQL",
+        "MongoDB",
+        "Docker",
+        "AWS (S3, EC2)",
+        "Git & GitHub",
+        "REST APIs",
+        "GraphQL",
+        "CI/CD Pipelines",
+        "Agile & Scrum"
+      ],
+      "experience": [
+        {
+          "company": "TechNova Solutions",
+          "role": "Senior Software Engineer",
+          "location": "San Francisco, CA",
+          "startDate": "Jan 2024",
+          "endDate": "Present",
+          "description": "Led a team of 4 developers to redesign and migrate legacy monolith application to a modern microservices architecture using Next.js and Node.js.\n• Optimized database query performance on PostgreSQL, reducing page load times by 40%.\n• Implemented automated CI/CD pipelines using GitHub Actions, decreasing deployment failure rate by 15%.\n• Designed and integrated high-throughput REST APIs, serving over 50,000 active daily users."
+        },
+        {
+          "company": "Innovate Labs",
+          "role": "Full Stack Developer",
+          "location": "Austin, TX",
+          "startDate": "Mar 2021",
+          "endDate": "Dec 2023",
+          "description": "Developed and maintained user-facing features for a leading collaborative SaaS platform using React and Express.js.\n• Collaborated with product designers to implement pixel-perfect, responsive components, improving mobile user retention by 20%.\n• Integrated payment gateway solutions using Stripe API, driving $500K+ in annual recurring revenue.\n• Wrote comprehensive unit and integration tests using Jest and Cypress, raising code coverage from 65% to 90%."
+        }
+      ],
+      "education": [
+        {
+          "school": "University of California, Berkeley",
+          "degree": "Bachelor of Science",
+          "fieldOfStudy": "Computer Science",
+          "location": "Berkeley, CA",
+          "startDate": "Sep 2016",
+          "endDate": "May 2020",
+          "description": "Graduated with Honors. Coursework focused on Software Engineering, Data Structures, and Database Systems."
+        }
+      ],
+      "projects": [
+        {
+          "name": "SaaS Analytics Dashboard",
+          "description": "A real-time, customizable sales tracking and analytics platform for SaaS businesses.\n• Built interactive data visualizations using React, Chart.js, and Tailwind CSS.\n• Set up serverless API backend with Node.js and AWS Lambda, processing 10M+ events monthly.\n• Implemented secure JWT user authentication and role-based access control.",
+          "url": "https://github.com/johndoe/saas-dashboard"
+        },
+        {
+          "name": "Developer Portfolio Website",
+          "description": "Fully responsive, optimized portfolio website showcasing personal projects and technical blog posts.\n• Designed clean, minimal UI prioritizing accessibility (WCAG AA compliant).\n• Optimized static assets, achieving 100/100 Lighthouse performance score.\n• Deployed via Vercel with automatic domain configuration and SSL.",
+          "url": "https://johndoe.dev"
+        }
+      ]
+    },
+    "updatedAt": "2026-06-22T09:45:08.196Z"
+  }
+]
