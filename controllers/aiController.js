@@ -126,3 +126,63 @@ JSON Schema output:
     res.status(500).json({ error: 'Failed to generate suggestions: ' + error.message });
   }
 };
+
+/**
+ * Endpoint: Generate professional summary based on resume profile details
+ */
+export const generateSummary = async (req, res) => {
+  const { title, skills, experience, projects } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  // Build local heuristic backup summary
+  const cleanTitle = title && title.trim() !== '' ? title : 'Software Professional';
+  const skillsList = Array.isArray(skills) && skills.length > 0 ? skills.slice(0, 4) : ['Full-Stack Development', 'Software Engineering', 'System Architecture'];
+  const companies = Array.isArray(experience) && experience.length > 0 ? experience.map(e => e.company).filter(Boolean) : [];
+  const projectNames = Array.isArray(projects) && projects.length > 0 ? projects.map(p => p.name).filter(Boolean) : [];
+
+  const mainCompany = companies.length > 0 ? companies[0] : '';
+  const mainProj = projectNames.length > 0 ? projectNames[0] : '';
+
+  let backupSummary = `Results-driven ${cleanTitle} with a strong technical foundation, specializing in ${skillsList.join(', ')} to engineer high-performance web ecosystems.`;
+  if (mainCompany && mainProj) {
+    backupSummary += ` Proven history of delivering scalable solutions, demonstrated through development roles at ${mainCompany} and key software projects like ${mainProj}.`;
+  } else if (mainCompany) {
+    backupSummary += ` Proven history of delivering scalable solutions, demonstrated through technical contributions at ${mainCompany}.`;
+  } else if (mainProj) {
+    backupSummary += ` Proven history of delivering scalable solutions, demonstrated through key software projects like ${mainProj}.`;
+  }
+  backupSummary += ` Focused on writing clean, production-ready code, optimizing database query performances, and leveraging agile methodologies to drive rapid business growth.`;
+
+  // Try using Gemini if API key exists
+  if (apiKey && apiKey.trim() !== '') {
+    try {
+      const prompt = `
+You are a senior professional resume writer. Review the candidate's profile details:
+Role Title: "${cleanTitle}"
+Top Skills: ${JSON.stringify(skillsList)}
+Experience Details: ${JSON.stringify(experience || [])}
+Projects: ${JSON.stringify(projects || [])}
+
+Task:
+1. Compose a highly impactful, tailored 3-sentence professional summary (around 60-80 words) for the top of the resume.
+2. Emphasize tech stack expertise, key business accomplishments, and engineering qualities.
+3. Do not include markdown code block formats. Return ONLY the JSON object.
+
+JSON Schema output:
+{
+  "summary": "string containing the generated summary text"
+}
+`;
+      console.log('[Server] Generating professional summary with Gemini...');
+      const result = await callGemini(prompt, apiKey);
+      if (result && result.summary) {
+        return res.json(result);
+      }
+    } catch (error) {
+      console.error('[Server] Gemini summary generation failed, using heuristic backup:', error.message);
+    }
+  }
+
+  // Fallback response
+  res.json({ summary: backupSummary });
+};
