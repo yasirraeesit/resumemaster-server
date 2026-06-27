@@ -17,14 +17,26 @@ This is the Express backend service for **ResumeMaster**, containing the databas
 
 ## ⚙️ Features & Architecture
 
-* **🔐 Authenticated User Workspace**: Register and log in securely. Password hashes are stored safely in MongoDB and tokens are verified via JWT middleware.
-* **📄 Smart ATS Resume Parser**:
-  * Upload a PDF resume.
-  * The server extracts text using `pdf-parse`.
-  * If a `GEMINI_API_KEY` is present, it uses Gemini AI model prompts to format sections into clean JSON.
-  * If the API fails or is not provided, the server runs a custom, multi-pass **heuristic parsing fallback** that splits details into profile contact keys, education rows, bulleted projects, and skills.
-* **📋 Job Tracker Kanban Sync**: Handles CRUD operations for job applications mapped to Kanban lanes (`Wishlist`, `Applied`, `Interview`, `Offer`, `Rejected`).
-* **🧠 Copilot Integrations**: API endpoints to generate cover letters and optimize text inputs.
+* **🔐 Authenticated User Workspace (`routes/authRoutes.js`)**:
+  * User Registration (`/api/register`) hashing passwords securely via `bcryptjs`.
+  * User Login (`/api/login`) returning JWT tokens for secure authentication middleware verification.
+* **📄 Dual-Engine ATS Resume Parser (`routes/aiRoutes.js` / `controllers/resumeController.js`)**:
+  * Multer-based multipart endpoints accepting binary files.
+  * Integration with `pdf-parse` to convert PDFs to plain text.
+  * **AI Parser**: Connects to the Google Gemini API to structure text into profile objects using targeted instructions.
+  * **Heuristics Fallback Parser**: A robust multi-pass rule engine that runs if Gemini is unavailable. It parses text into structured blocks by:
+    * Identifying section titles dynamically (regular expressions matching standard titles like `experience`, `education`, `skills`).
+    * Running a multi-pass regex filter to separate contact keys (emails, LinkedIn profiles, phone numbers, websites).
+    * Restructuring experience description rows and identifying bullet point details.
+* **📋 Job Tracker API (`routes/matcherRoutes.js`)**:
+  * Endpoints to manage card state updates inside the Kanban lanes (`Wishlist`, `Applied`, `Interview`, `Offer`, `Rejected`).
+  * Real-time ATS match calculations comparing resume keywords to target role listings.
+* **🤖 Career copilot tools (`routes/careerRoutes.js`)**:
+  * AI-driven endpoints generating cover letters tailored to targeted role parameters.
+  * Question generators for behavioral/technical interviews.
+  * Headline/Summary rewriting modules for LinkedIn profile SEO.
+* **📂 Document Storage (`routes/resumeRoutes.js` / `routes/documentRoutes.js`)**:
+  * Full REST endpoints allowing users to save, modify, retrieve, and delete multiple resumes mapped in MongoDB.
 
 ---
 
