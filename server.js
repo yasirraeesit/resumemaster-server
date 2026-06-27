@@ -45,6 +45,10 @@ app.use((err, req, res, next) => {
 });
 
 // Initialize server listener
-app.listen(PORT, () => {
-  console.log(`[Server] ATS backend running in ${process.env.NODE_ENV || 'development'} mode on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`[Server] ATS backend running in development mode on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
