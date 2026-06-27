@@ -88,3 +88,13 @@ You can host this backend server on Render, Railway, Fly.io, or Heroku.
 3. Configure build and start parameters:
    * **Build Command**: `npm install`
    * **Start Command**: `node server.js`
+
+---
+
+## 💖 Support, Donations & Sponsors
+
+If this open-source project has helped you host your own parser API, please support its maintenance:
+* **⭐ Star this Repository**: Help developers find the backend APIs by starring this project on GitHub.
+* **☕ Buy Me A Coffee**: Send a one-time support contribution via [Buy Me A Coffee](https://www.buymeacoffee.com/yasirraeesit).
+* **🤝 Sponsors**: If your organization uses ResumeMaster or you want to showcase your brand, please contact us for sponsorship opportunities.
+
