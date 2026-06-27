@@ -357,7 +357,20 @@ function heuristicParse(text) {
     if (section === 'summary') {
       resumeData.summary = buf.join(' ').trim();
     } else if (section === 'skills') {
-      resumeData.skills = buf.flatMap(l => l.split(/[|,;]/)).map(s => s.replace(/^[•\-\*\s]+/, '').trim()).filter(s => s.length > 1 && s.length < 40);
+      const rawSkills = [];
+      for (const line of buf) {
+        let cleanLine = line;
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1 && colonIdx < 30) {
+          cleanLine = line.substring(colonIdx + 1);
+        }
+        const parts = cleanLine.split(/[|•\u2022●,;\/]/).map(s => s.trim()).filter(Boolean);
+        rawSkills.push(...parts);
+      }
+      const newSkills = rawSkills
+        .map(s => s.replace(/^[•\-\*\s]+/, '').trim())
+        .filter(s => s.length > 1 && s.length < 50);
+      resumeData.skills = [...(resumeData.skills || []), ...newSkills];
     } else if (section === 'experience') {
       // Split into individual jobs by detecting 'Company | Role — Duration' header lines
       const jobs = [[]];
@@ -439,10 +452,9 @@ function heuristicParse(text) {
 
   for (const line of lines) {
     let matched = null;
-    // Check if the entire line (after stripping non-alpha) matches a section header keyword
     const cleanLine = line.replace(/[^a-zA-Z\s]/g, '').trim();
-    // Only treat as a section header if the line is short (< 50 chars) and matches
-    if (cleanLine.length > 0 && cleanLine.length < 50) {
+    // Only treat as a section header if the line is short and has no list delimiters
+    if (cleanLine.length > 0 && cleanLine.length < 30 && !line.includes(':') && !line.includes('|') && !line.includes('/') && !line.includes(',')) {
       for (const [key, pattern] of Object.entries(SECTION_PATTERNS)) {
         if (pattern.test(cleanLine)) {
           matched = key;
