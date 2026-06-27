@@ -29,12 +29,20 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState;
   const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  
+  // Safely mask the MongoDB URI for debugging
+  let maskedUri = 'undefined';
+  if (process.env.MONGO_URI) {
+    maskedUri = process.env.MONGO_URI.replace(/:([^@]+)@/, ':****@');
+  }
+
   res.json({
     status: 'OK',
     message: 'ATS Resume Builder backend API running smoothly.',
     database: {
       status: dbStates[dbStatus],
-      code: dbStatus
+      code: dbStatus,
+      uri: maskedUri
     }
   });
 });
