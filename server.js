@@ -27,7 +27,16 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health Check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'ATS Resume Builder backend API running smoothly.' });
+  const dbStatus = mongoose.connection.readyState;
+  const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  res.json({
+    status: 'OK',
+    message: 'ATS Resume Builder backend API running smoothly.',
+    database: {
+      status: dbStates[dbStatus],
+      code: dbStatus
+    }
+  });
 });
 
 // Route registration
