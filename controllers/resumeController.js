@@ -177,26 +177,66 @@ function heuristicParse(text) {
     sections: ['summary', 'skills', 'experience', 'education', 'projects']
   };
 
-  // Extract contact info via regex
+  // 1. Extract Name (first short alphabetic line that is not an email/URL)
+  let nameIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.length < 40 && line.length > 2 && !line.includes('@') && !/https?:\/\//.test(line) && /^[A-Za-z\s.'-]+$/.test(line)) {
+      resumeData.personalInfo.fullName = line;
+      nameIndex = i;
+      break;
+    }
+  }
+
+  // 2. Extract Professional Title (1-2 lines directly after the Name)
+  if (nameIndex !== -1) {
+    for (let i = nameIndex + 1; i <= Math.min(nameIndex + 3, lines.length - 1); i++) {
+      const line = lines[i];
+      if (line.includes('@') || /https?:\/\//.test(line) || /[\d()+-]{7,}/.test(line)) continue;
+      // Checks for capitalized alphabetic words typical of job titles (e.g. Software Engineer, Designer)
+      if (line.length < 50 && /^[A-Z][a-zA-Z\s\-&/,]+$/.test(line)) {
+        resumeData.personalInfo.title = line;
+        break;
+      }
+    }
+  }
+
+  // 3. Extract Location (City, State / City, Country from first 15 lines of text)
+  const headerText = lines.slice(0, 15).join('\n');
+  const locationMatch = headerText.match(/\b([A-Z][a-zA-Z\s.-]+,\s*(?:[A-Z]{2}|[A-Z][a-z]{2,15}))\b/);
+  if (locationMatch) {
+    resumeData.personalInfo.location = locationMatch[1].trim();
+  }
+
+  // 4. Extract Contact Info (Email & Phone)
   const emailMatch = text.match(/([a-zA-Z0-9._+-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/);
   const phoneMatch = text.match(/(\+?[\d\s\-().]{7,15}\d)/);
-  const urls = (text.match(/https?:\/\/[^\s)>]+/gi) || []).map(u => u.replace(/[.,;]+$/, ''));
-
   if (emailMatch) resumeData.personalInfo.email = emailMatch[1];
   if (phoneMatch) resumeData.personalInfo.phone = phoneMatch[1].trim();
 
-  urls.forEach(url => {
-    if (/github\.com/i.test(url)) resumeData.personalInfo.github = url;
-    else if (/linkedin\.com/i.test(url)) resumeData.personalInfo.linkedin = url;
-    else if (!resumeData.personalInfo.website) resumeData.personalInfo.website = url;
-  });
+  // 5. Extract Profile Links (supporting links without protocols like linkedin.com/in/...)
+  const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_\-\u00A0-\uD7FF]+/i);
+  if (linkedinMatch) {
+    let url = linkedinMatch[0];
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    resumeData.personalInfo.linkedin = url;
+  }
 
-  // First meaningful line = name if short and not an email/URL
-  for (const line of lines) {
-    if (line.length < 40 && line.length > 2 && !line.includes('@') && !/https?:\/\//.test(line) && /^[A-Za-z\s.'-]+$/.test(line)) {
-      resumeData.personalInfo.fullName = line;
-      break;
-    }
+  const githubMatch = text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_\-]+/i);
+  if (githubMatch) {
+    let url = githubMatch[0];
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    resumeData.personalInfo.github = url;
+  }
+
+  // General website extraction (excluding email, github, and linkedin)
+  const allUrls = text.match(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,6}(?:\/[^\s]*)?/gi) || [];
+  for (const urlToken of allUrls) {
+    if (/github\.com/i.test(urlToken) || /linkedin\.com/i.test(urlToken) || /@/i.test(urlToken)) continue;
+    let url = urlToken;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    resumeData.personalInfo.website = url;
+    break;
   }
 
   // Section detection
