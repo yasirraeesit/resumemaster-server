@@ -15,42 +15,62 @@ if (!fs.existsSync(DB_FILE)) {
   fs.writeFileSync(DB_FILE, JSON.stringify([]));
 }
 
-// Helper to flush section text arrays into standard schema objects (heuristic parser)
-function flushSection(section, buffer, resumeData) {
-  if (buffer.length === 0) return;
-  const content = buffer.join('\n');
+// ── Sanitize parsed Gemini response to fix common formatting artifacts ──
+function sanitizeParsed(data) {
+  if (!data || typeof data !== 'object') return data;
 
-  if (section === 'summary') {
-    resumeData.summary = content;
-  } else if (section === 'skills') {
-    resumeData.skills = buffer
-      .flatMap(line => line.split(/[|,]/))
-      .map(s => s.trim())
-      .filter(Boolean);
-  } else if (section === 'experience') {
-    resumeData.experience.push({
-      company: 'Extracted Company',
-      role: 'Extracted Role',
-      startDate: '',
-      endDate: '',
-      description: content
-    });
-  } else if (section === 'education') {
-    resumeData.education.push({
-      school: 'Extracted School',
-      degree: 'Extracted Degree',
-      fieldOfStudy: '',
-      startDate: '',
-      endDate: '',
-      description: content
-    });
-  } else if (section === 'projects') {
-    resumeData.projects.push({
-      name: 'Extracted Project',
-      description: content,
-      url: ''
-    });
-  }
+  const cleanDescription = (str) => {
+    if (!str || typeof str !== 'string') return '';
+    return str
+      .replace(/\r\n/g, '\n')          // normalize line endings
+      .replace(/\n{2,}/g, '\n')        // collapse double+ newlines to single
+      .split('\n')
+      .map(line => line.replace(/^[•\-\*\s]+/, '').trim()) // strip leading bullet chars
+      .filter(line => line.length > 1) // remove blank or single-char lines
+      .map(line => `• ${line}`)        // re-normalize with clean bullet prefix
+      .join('\n');
+  };
+
+  const toArray = (val) => Array.isArray(val) ? val : [];
+  const toStr   = (val) => (val && typeof val === 'string') ? val.trim() : '';
+
+  return {
+    personalInfo: {
+      fullName:  toStr(data.personalInfo?.fullName),
+      title:     toStr(data.personalInfo?.title),
+      email:     toStr(data.personalInfo?.email),
+      phone:     toStr(data.personalInfo?.phone),
+      location:  toStr(data.personalInfo?.location),
+      website:   toStr(data.personalInfo?.website),
+      github:    toStr(data.personalInfo?.github),
+      linkedin:  toStr(data.personalInfo?.linkedin),
+    },
+    summary: toStr(data.summary),
+    skills: toArray(data.skills).map(s => toStr(s)).filter(Boolean),
+    experience: toArray(data.experience).map(exp => ({
+      company:   toStr(exp.company),
+      role:      toStr(exp.role),
+      location:  toStr(exp.location),
+      startDate: toStr(exp.startDate),
+      endDate:   toStr(exp.endDate),
+      description: cleanDescription(exp.description)
+    })),
+    education: toArray(data.education).map(edu => ({
+      school:       toStr(edu.school),
+      degree:       toStr(edu.degree),
+      fieldOfStudy: toStr(edu.fieldOfStudy),
+      location:     toStr(edu.location),
+      startDate:    toStr(edu.startDate),
+      endDate:      toStr(edu.endDate),
+      description:  cleanDescription(edu.description)
+    })),
+    projects: toArray(data.projects).map(proj => ({
+      name:        toStr(proj.name),
+      description: cleanDescription(proj.description),
+      url:         toStr(proj.url)
+    })),
+    sections: ['summary', 'skills', 'experience', 'education', 'projects']
+  };
 }
 
 /**
@@ -59,82 +79,74 @@ function flushSection(section, buffer, resumeData) {
 async function parseWithGemini(resumeText, apiKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   
-  const prompt = `
-You are an expert resume parsing system. Analyze the following raw text extracted from a resume PDF and map it into a structured JSON format matching the schema instructions.
+  const prompt = `You are an expert resume parsing system. Analyze the raw text extracted from a resume PDF and return ONLY a valid JSON object matching the schema below. No markdown, no explanation, no code blocks — raw JSON only.
 
-Rules:
-1. Ensure all experience descriptions, projects, and education descriptions are converted into clean, separate bullet points starting with the bullet character "•" separated by newlines.
-2. For education entries, extract fields like school, degree, fieldOfStudy, location, startDate, and endDate accurately.
-3. For skills, return an array of strings representing individual skills/technologies.
-4. If details are missing or cannot be found, leave them as empty strings "" or empty arrays [].
-5. Do not include markdown wraps (like \`\`\`json) in your final response. Return ONLY the raw JSON string.
+CRITICAL FORMATTING RULES:
+1. All "description" fields for experience, education, and projects MUST be a string of bullet points.
+2. Each bullet point MUST start with the character "•" (bullet) followed by a space, then the text.
+3. Separate each bullet with EXACTLY ONE newline character (\\n). NO double newlines, NO blank lines.
+4. If a description has only one point, still format it as a single bullet: "• Achieved X."
+5. Skills MUST be an array of individual skill strings, never a comma-separated single string.
+6. Dates should follow the format "Mon YYYY" (e.g., "Jan 2021") or "YYYY" for education. Use "Present" if ongoing.
+7. If a field cannot be determined, use "" for strings and [] for arrays. NEVER use null.
 
 Raw Resume Text:
+"""
 ${resumeText}
+"""
 
-JSON Schema structure:
+Required JSON Schema:
 {
   "personalInfo": {
-    "fullName": "Candidate full name",
-    "title": "Candidate current professional title / target role",
-    "email": "Candidate email address",
-    "phone": "Candidate phone number",
-    "location": "Candidate city and state",
-    "website": "Candidate personal website link",
-    "github": "Candidate GitHub profile link",
-    "linkedin": "Candidate LinkedIn profile link"
+    "fullName": "",
+    "title": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "website": "",
+    "github": "",
+    "linkedin": ""
   },
-  "summary": "Professional summary of qualifications",
-  "skills": ["array of skills / keywords"],
+  "summary": "",
+  "skills": ["skill1", "skill2"],
   "experience": [
     {
-      "company": "Company Name",
-      "role": "Job Title",
-      "location": "Location (City, State)",
-      "startDate": "Start date (e.g. Jan 2021)",
-      "endDate": "End date (e.g. Present or Dec 2023)",
-      "description": "Achievement bullet points starting with • and separated by newlines"
+      "company": "",
+      "role": "",
+      "location": "",
+      "startDate": "",
+      "endDate": "",
+      "description": "• Achieved X by doing Y, resulting in Z.\\n• Led team of 5 engineers to deliver..."
     }
   ],
   "education": [
     {
-      "school": "School or University Name",
-      "degree": "Degree (e.g. Bachelor of Science)",
-      "fieldOfStudy": "Field of Study (e.g. Computer Science)",
-      "location": "Location (City, State)",
-      "startDate": "Start Date",
-      "endDate": "End Date",
-      "description": "Achievements / details starting with • and separated by newlines"
+      "school": "",
+      "degree": "",
+      "fieldOfStudy": "",
+      "location": "",
+      "startDate": "",
+      "endDate": "",
+      "description": ""
     }
   ],
   "projects": [
     {
-      "name": "Project Name",
-      "description": "Details and outcomes starting with •",
-      "url": "Project website / repository URL"
+      "name": "",
+      "description": "• Built X using Y technology.\\n• Achieved Z outcome.",
+      "url": ""
     }
   ]
-}
-`;
+}`;
 
   const requestBody = {
-    contents: [
-      {
-        parts: [
-          { text: prompt }
-        ]
-      }
-    ],
-    generationConfig: {
-      responseMimeType: "application/json"
-    }
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: 'application/json' }
   };
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody)
   });
 
@@ -145,11 +157,271 @@ JSON Schema structure:
 
   const resJson = await response.json();
   const textOutput = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!textOutput) {
-    throw new Error('Failed to retrieve content from Gemini response.');
+  if (!textOutput) throw new Error('Failed to retrieve content from Gemini response.');
+
+  const parsed = JSON.parse(textOutput.trim());
+  return sanitizeParsed(parsed);
+}
+
+// ── Improved heuristic fallback parser ─────────────────────────────
+function heuristicParse(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const resumeData = {
+    personalInfo: { fullName: '', title: '', email: '', phone: '', location: '', website: '', github: '', linkedin: '' },
+    summary: '',
+    experience: [],
+    education: [],
+    skills: [],
+    projects: [],
+    sections: ['summary', 'skills', 'experience', 'education', 'projects']
+  };
+
+  // Extract contact info via regex
+  const emailMatch = text.match(/([a-zA-Z0-9._+-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/);
+  const phoneMatch = text.match(/(\+?[\d\s\-().]{7,15}\d)/);
+  const urls = (text.match(/https?:\/\/[^\s)>]+/gi) || []).map(u => u.replace(/[.,;]+$/, ''));
+
+  if (emailMatch) resumeData.personalInfo.email = emailMatch[1];
+  if (phoneMatch) resumeData.personalInfo.phone = phoneMatch[1].trim();
+
+  urls.forEach(url => {
+    if (/github\.com/i.test(url)) resumeData.personalInfo.github = url;
+    else if (/linkedin\.com/i.test(url)) resumeData.personalInfo.linkedin = url;
+    else if (!resumeData.personalInfo.website) resumeData.personalInfo.website = url;
+  });
+
+  // First meaningful line = name if short and not an email/URL
+  for (const line of lines) {
+    if (line.length < 40 && line.length > 2 && !line.includes('@') && !/https?:\/\//.test(line) && /^[A-Za-z\s.'-]+$/.test(line)) {
+      resumeData.personalInfo.fullName = line;
+      break;
+    }
   }
 
-  return JSON.parse(textOutput.trim());
+  // Section detection
+  // Fuzzy section header detection — handles ALL CAPS, misspellings, and partial matches
+  const SECTION_PATTERNS = {
+    summary:    /\b(summary|profile|professional summary|objective|about me|about)\b/i,
+    experience: /\b(experience|experiance|experince|expierence|work experience|employment|professional experience|career history|work history)\b/i,
+    education:  /\b(education|academic|studies|qualifications|degree)\b/i,
+    skills:     /\b(skills|technical skills|technologies|competencies|tools|tech stack|core competencies)\b/i,
+    projects:   /\b(projects|personal projects|side projects|portfolio|key projects|academic projects)\b/i,
+  };
+
+  // Detects 'Company | Role — 1.2 Years' or 'Company | Role — Jan 2021 - Present' patterns
+  const COMPANY_ROLE_LINE = /^(.+?)\s*[|\u2014\u2013\-]{1,3}\s*(.+?)\s*[\u2014\-]{1,3}\s*(.+)$/;
+  const DATE_RANGE = /((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}|\d{4}|\d+\.?\d*\s*(?:year|yr|month|mo)s?)\s*[-–—to]*\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}|\d{4}|present|current|now)?/i;
+  const BULLET_LINE = /^[•\-\*\u2022●]\s*/;
+
+  let currentSection = null;
+  let buffer = [];
+
+  const pushExperience = (buf) => {
+    if (!buf.length) return;
+    let role = '', company = '', startDate = '', endDate = '', descLines = [];
+
+    for (const line of buf) {
+      // Handle 'Company | Role — Duration' format (e.g. 'INNOVENT Tech | Junior MERN Stack Developer — 1.2 Years')
+      const companyRoleMatch = line.match(COMPANY_ROLE_LINE);
+      if (companyRoleMatch && !company) {
+        company   = companyRoleMatch[1].trim();
+        role      = companyRoleMatch[2].trim();
+        const durStr = companyRoleMatch[3].trim();
+        // Try to extract date range from duration string
+        const dateMatch = durStr.match(DATE_RANGE);
+        if (dateMatch) {
+          startDate = dateMatch[1] || '';
+          endDate   = dateMatch[2] || durStr;
+        } else {
+          endDate = durStr; // e.g. '1.2 Years'
+        }
+      } else {
+        const dateMatch = line.match(DATE_RANGE);
+        if (dateMatch && !startDate && !company) {
+          startDate = dateMatch[1] || '';
+          endDate   = dateMatch[2] || '';
+        } else if (BULLET_LINE.test(line) || line.startsWith('●') || line.startsWith('•')) {
+          descLines.push(line.replace(/^[•\-\*●\s]+/, '').trim());
+        } else if (!role && !company && line.length > 2) {
+          role = line;
+        } else if (!company && line.length > 2) {
+          company = line;
+        }
+      }
+    }
+    if (company || role) {
+      resumeData.experience.push({
+        company:   company || 'Unknown Company',
+        role:      role    || 'Unknown Role',
+        startDate, endDate,
+        description: descLines.map(l => `• ${l}`).join('\n')
+      });
+    }
+  };
+
+  const pushEducation = (buf) => {
+    if (!buf.length) return;
+    let school = '', degree = '', fieldOfStudy = '', startDate = '', endDate = '';
+    for (const line of buf) {
+      // Lines containing year ranges are dates
+      const dateMatch = line.match(/(\d{4})\s*[-–—]\s*(\d{4}|present)/i);
+      if (dateMatch) {
+        startDate = dateMatch[1]; endDate = dateMatch[2];
+        continue;
+      }
+      // Lines containing university/college/school keywords = school name
+      if (/\b(university|college|school|institute|academy|hajvery|iqra|lums|nust|fast|comsats|uet|pu|bahria)\b/i.test(line)) {
+        school = line.replace(dateMatch?.[0] || '', '').trim();
+      } else if (!degree && line.length > 3) {
+        degree = line;
+      } else if (degree && !fieldOfStudy && line.length > 3) {
+        fieldOfStudy = line;
+      }
+    }
+    // If school wasn't found by keyword, use second non-date line
+    if (!school && buf.length > 1) {
+      school = buf.find(l => !/(\d{4})/.test(l) && l !== degree) || '';
+    }
+    resumeData.education.push({ school, degree, fieldOfStudy, location: '', startDate, endDate, description: '' });
+  };
+
+  const pushProject = (buf) => {
+    if (!buf.length) return;
+    // First line = project title (strip URL if accidentally the title)
+    const name = buf[0] || 'Unnamed Project';
+    let url = '';
+    const descLines = [];
+
+    for (const line of buf.slice(1)) {
+      // Extract URL
+      const urlMatch = line.match(/https?:\/\/[^\s)>]+/);
+      if (/^(URL:|https?:\/\/)/i.test(line) && urlMatch) {
+        url = urlMatch[0].replace(/[.,;]+$/, '');
+        continue;
+      }
+      // Skip empty bullets like standalone '●' or '•'
+      if (/^[●•]\s*$/.test(line.trim())) continue;
+      // Collect bullet lines (already joined by first pass)
+      if (/^[●•\-\*\s]*[●•]/.test(line) || line.trim().startsWith('●') || line.trim().startsWith('•')) {
+        const cleaned = line.replace(/^[●•\-\*\s]+/, '').trim();
+        if (cleaned.length > 2) descLines.push(`• ${cleaned}`);
+      }
+    }
+
+    resumeData.projects.push({ name: name.replace(/^(URL:|https?:\/\/\S+)/i, '').trim() || 'Project', description: descLines.join('\n'), url });
+  };
+
+
+  const flushBuffer = (section, buf) => {
+    if (!buf.length) return;
+    if (section === 'summary') {
+      resumeData.summary = buf.join(' ').trim();
+    } else if (section === 'skills') {
+      resumeData.skills = buf.flatMap(l => l.split(/[|,;]/)).map(s => s.replace(/^[•\-\*\s]+/, '').trim()).filter(s => s.length > 1 && s.length < 40);
+    } else if (section === 'experience') {
+      // Split into individual jobs by detecting 'Company | Role — Duration' header lines
+      const jobs = [[]];
+      for (const line of buf) {
+        if (line.match(COMPANY_ROLE_LINE) && jobs[jobs.length - 1].some(l => BULLET_LINE.test(l) || l.startsWith('●'))) {
+          jobs.push([line]);
+        } else {
+          jobs[jobs.length - 1].push(line);
+        }
+      }
+      jobs.filter(j => j.length > 0).forEach(pushExperience);
+    } else if (section === 'education') {
+      pushEducation(buf);
+    } else if (section === 'projects') {
+      // Strategy: join continuation lines to their preceding bullet,
+      // split into projects when we see a project title after a URL marker.
+      // A project title is a non-bullet line that contains '|' or is a short title-case phrase
+      // AND appears right after a URL line or at the very start.
+
+      const URL_LINE  = /^(https?:\/\/|URL:|●\s*$)/i;
+      const PROJ_TITLE = (line) =>
+        !BULLET_LINE.test(line) &&
+        !URL_LINE.test(line) &&
+        line.length > 5 && line.length < 120 &&
+        (line.includes('|') || /^[A-Z][A-Za-z0-9\s\-&:.,'"]+$/.test(line));
+
+      // First pass: join wrapped continuation lines to their preceding bullet
+      const joined = [];
+      for (const line of buf) {
+        const isBullet = BULLET_LINE.test(line) || line.startsWith('●') || line.startsWith('•');
+        const isUrl    = URL_LINE.test(line);
+        const isTitle  = PROJ_TITLE(line);
+
+        if (isBullet || isUrl || isTitle || joined.length === 0) {
+          joined.push(line);
+        } else {
+          // Continuation of previous line — append to it
+          const last = joined[joined.length - 1];
+          const lastIsBullet = BULLET_LINE.test(last) || last.startsWith('●') || last.startsWith('•');
+          if (lastIsBullet && last.trim() !== '●' && last.trim() !== '•') {
+            joined[joined.length - 1] = last + ' ' + line;
+          } else {
+            joined.push(line);
+          }
+        }
+      }
+
+      // Second pass: split into individual projects
+      // A new project starts when we see a title line that comes after a URL or at start
+      const projs = [[]];
+      let lastWasUrl = false;
+
+      for (const line of joined) {
+        const isBullet = BULLET_LINE.test(line) || line.startsWith('●') || line.startsWith('•');
+        const isUrl    = URL_LINE.test(line);
+        const isTitle  = PROJ_TITLE(line);
+
+        if (isTitle && (lastWasUrl || projs[projs.length - 1].length === 0)) {
+          if (projs[projs.length - 1].length > 0) projs.push([]);
+          projs[projs.length - 1].push(line);
+          lastWasUrl = false;
+        } else if (isUrl) {
+          // Store URL in current project but mark boundary
+          projs[projs.length - 1].push(line);
+          lastWasUrl = true;
+        } else if (isTitle && projs[projs.length - 1].length === 0) {
+          projs[projs.length - 1].push(line);
+          lastWasUrl = false;
+        } else {
+          projs[projs.length - 1].push(line);
+          if (!isUrl) lastWasUrl = false;
+        }
+      }
+
+      projs.filter(p => p.length > 0).forEach(pushProject);
+    }
+
+  };
+
+  for (const line of lines) {
+    let matched = null;
+    // Check if the entire line (after stripping non-alpha) matches a section header keyword
+    const cleanLine = line.replace(/[^a-zA-Z\s]/g, '').trim();
+    // Only treat as a section header if the line is short (< 50 chars) and matches
+    if (cleanLine.length > 0 && cleanLine.length < 50) {
+      for (const [key, pattern] of Object.entries(SECTION_PATTERNS)) {
+        if (pattern.test(cleanLine)) {
+          matched = key;
+          break;
+        }
+      }
+    }
+    if (matched) {
+      flushBuffer(currentSection, buffer);
+      currentSection = matched;
+      buffer = [];
+    } else {
+      buffer.push(line);
+    }
+  }
+  flushBuffer(currentSection, buffer);
+
+  return resumeData;
 }
 
 /**
@@ -165,7 +437,10 @@ export const parseResume = async (req, res) => {
     const parsedData = await pdfParse(dataBuffer);
     const text = parsedData.text;
 
-    // Check if Gemini API key is configured
+    if (!text || text.trim().length < 20) {
+      return res.status(400).json({ error: 'Could not extract text from this PDF. It may be image-based or encrypted.' });
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && apiKey.trim() !== '') {
@@ -173,109 +448,17 @@ export const parseResume = async (req, res) => {
       try {
         const extractedData = await parseWithGemini(text, apiKey);
         console.log('[Server] Gemini successfully parsed PDF!');
-        return res.json({
-          success: true,
-          text: text,
-          extractedData: extractedData
-        });
+        return res.json({ success: true, text, extractedData, method: 'gemini' });
       } catch (geminiError) {
-        console.error('[Server] Gemini parsing failed, falling back to heuristics:', geminiError);
+        console.error('[Server] Gemini parsing failed, falling back to heuristics:', geminiError.message);
       }
     }
 
-    // Heuristics Fallback
-    console.log('[Server] Using heuristics fallback for parsing...');
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    
-    const resumeData = {
-      personalInfo: {
-        fullName: '',
-        title: '',
-        email: '',
-        phone: '',
-        location: '',
-        website: '',
-        github: '',
-        linkedin: ''
-      },
-      summary: '',
-      experience: [],
-      education: [],
-      skills: [],
-      projects: []
-    };
+    // Heuristic Fallback
+    console.log('[Server] Using improved heuristics fallback for parsing...');
+    const extractedData = heuristicParse(text);
 
-    const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
-    const phoneRegex = /(\+?\d{1,4}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-    const urls = text.match(/https?:\/\/[^\s]+/gi) || [];
-
-    const emails = text.match(emailRegex);
-    if (emails && emails.length > 0) resumeData.personalInfo.email = emails[0];
-
-    const phones = text.match(phoneRegex);
-    if (phones && phones.length > 0) resumeData.personalInfo.phone = phones[0];
-
-    urls.forEach(url => {
-      if (url.includes('github.com')) resumeData.personalInfo.github = url;
-      else if (url.includes('linkedin.com')) resumeData.personalInfo.linkedin = url;
-      else resumeData.personalInfo.website = url;
-    });
-
-    if (lines.length > 0) {
-      const potentialName = lines[0];
-      if (potentialName.length < 30 && !potentialName.includes('@') && !potentialName.includes('/')) {
-        resumeData.personalInfo.fullName = potentialName;
-      }
-    }
-
-    let currentSection = 'summary';
-    let currentTextBuffer = [];
-
-    const sectionHeaders = {
-      summary: ['summary', 'profile', 'objective', 'about me'],
-      experience: ['experience', 'work experience', 'employment history', 'work history', 'professional experience'],
-      education: ['education', 'academic background', 'studies'],
-      skills: ['skills', 'technical skills', 'skills & technologies', 'competencies'],
-      projects: ['projects', 'personal projects', 'key projects', 'academic projects']
-    };
-
-    lines.forEach((line, index) => {
-      if (index === 0 && line === resumeData.personalInfo.fullName) return;
-
-      const lineLower = line.toLowerCase().replace(/[^a-z ]/g, '').trim();
-      let matchedHeader = null;
-
-      for (const [sectionKey, keywords] of Object.entries(sectionHeaders)) {
-        if (keywords.includes(lineLower)) {
-          matchedHeader = sectionKey;
-          break;
-        }
-      }
-
-      if (matchedHeader) {
-        flushSection(currentSection, currentTextBuffer, resumeData);
-        currentSection = matchedHeader;
-        currentTextBuffer = [];
-      } else {
-        currentTextBuffer.push(line);
-      }
-    });
-    
-    flushSection(currentSection, currentTextBuffer, resumeData);
-
-    if (resumeData.skills.length > 0 && resumeData.skills.every(s => s.includes(',') || s.includes('|'))) {
-      const skillsText = resumeData.skills.join(', ');
-      resumeData.skills = skillsText
-        .split(/[|,]/)
-        .map(s => s.trim())
-        .filter(Boolean);
-    }
-
-    res.json({
-      success: true,
-      text: text,
-      extractedData: resumeData
-    });
+    res.json({ success: true, text, extractedData, method: 'heuristic' });
   } catch (error) {
     console.error('PDF parsing error:', error);
     res.status(500).json({ error: 'Failed to parse resume PDF. ' + error.message });
