@@ -193,8 +193,7 @@ function heuristicParse(text) {
     for (let i = nameIndex + 1; i <= Math.min(nameIndex + 3, lines.length - 1); i++) {
       const line = lines[i];
       if (line.includes('@') || /https?:\/\//.test(line) || /[\d()+-]{7,}/.test(line)) continue;
-      // Checks for capitalized alphabetic words typical of job titles (e.g. Software Engineer, Designer)
-      if (line.length < 50 && /^[A-Z][a-zA-Z\s\-&/,]+$/.test(line)) {
+      if (line.length < 60 && /^[A-Z][a-zA-Z\s\-&/,|()]+$/.test(line)) {
         resumeData.personalInfo.title = line;
         break;
       }
