@@ -134,7 +134,7 @@ export const updateProfile = async (req, res) => {
     }
 
     await user.save();
-
+    
     res.json({
       success: true,
       user: {
@@ -147,3 +147,57 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ error: 'Failed to update profile. ' + err.message });
   }
 };
+
+export const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ error: 'Google credential token is required.' });
+    }
+
+    // Verify token with Google API endpoint
+    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Invalid Google credential token.' });
+    }
+
+    const payload = await response.json();
+    const { email, name } = payload;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Google account does not provide email.' });
+    }
+
+    // Check if user already exists
+    let user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Create new user with a hashed random password since authentication is managed by Google
+      const randomPassword = Math.random().toString(36).slice(-10) + 'A1!';
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+      user = new User({
+        fullName: name || 'Google User',
+        email: email.toLowerCase(),
+        password: hashedPassword
+      });
+      await user.save();
+    }
+
+    // Sign JWT session token
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Google authentication failed: ' + err.message });
+  }
+};
+
