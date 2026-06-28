@@ -43,7 +43,7 @@ async function callGemini(prompt, apiKey) {
  * Endpoint: Generate tailored Cover Letter
  */
 export const generateCoverLetter = async (req, res) => {
-  const { resumeText, jobDescription } = req.body;
+  const { resumeText, jobDescription, tone = 'Professional', length = 'Detailed' } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey || apiKey.trim() === '') {
@@ -64,7 +64,7 @@ Target Job Description:
 "${jobDescription}"
 
 Task:
-1. Write a highly tailored, professional cover letter matching the target job description.
+1. Write a highly tailored cover letter matching the target job description.
 2. Structure the letter with standard spacing and paragraphs:
    - Date placeholder (e.g. June 22, 2026)
    - Candidate details placeholders (Name, Location, Email, Phone) at the top.
@@ -74,8 +74,9 @@ Task:
    - Paragraph 3: Alignment of values, why they are excited about this company, and call to action.
    - Sincerely,
    - Candidate Name placeholder.
-3. Keep it to roughly 300-400 words. Make it sound human-written, warm, confident, and professional.
-4. Do not include markdown code block formatting. Return ONLY the JSON object.
+3. Tone of the cover letter: "${tone}". Adjust the style, expressions, and vocabulary to match this tone.
+4. Length of the cover letter: "${length === 'Short' ? 'short, concise and focused (around 200-250 words)' : 'detailed and descriptive (around 350-450 words)'}".
+5. Do not include markdown code block formatting. Return ONLY the JSON object.
 
 JSON Schema output:
 {
