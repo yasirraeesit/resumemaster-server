@@ -7,6 +7,7 @@ import resumeRoutes from './routes/resumeRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
 import documentRoutes from './routes/documentRoutes.js';
+import jobApplicationRoutes from './routes/jobApplicationRoutes.js';
 
 // Load environment configurations from .env file
 dotenv.config();
@@ -52,6 +53,7 @@ app.use('/api', resumeRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', careerRoutes);
 app.use('/api', documentRoutes);
+app.use('/api', jobApplicationRoutes);
 
 // Global Error Handler Middleware
 app.use((err, req, res, next) => {
