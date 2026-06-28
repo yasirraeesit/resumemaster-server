@@ -1,5 +1,11 @@
 import express from 'express';
-import { generateCoverLetter, generateLinkedIn, generateInterviewPrep, evaluateInterviewAnswer } from '../controllers/careerController.js';
+import {
+  generateCoverLetter,
+  generateLinkedIn,
+  generateInterviewPrep,
+  evaluateInterviewAnswer,
+  generateLinkedInPost
+} from '../controllers/careerController.js';
 
 const router = express.Router();
 
@@ -14,5 +20,8 @@ router.post('/career/interview-prep', generateInterviewPrep);
 
 // Evaluate Mock Interview Spoken Response
 router.post('/career/interview-evaluate', evaluateInterviewAnswer);
+
+// Generate customized LinkedIn Post
+router.post('/career/linkedin-post', generateLinkedInPost);
 
 export default router;

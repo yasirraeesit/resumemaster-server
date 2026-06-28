@@ -242,3 +242,57 @@ JSON Schema output:
   }
 };
 
+/**
+ * Endpoint: Generate tailored LinkedIn Post
+ */
+export const generateLinkedInPost = async (req, res) => {
+  const { resumeText, topic, tone = 'Professional', hookStyle = 'Bold statement', useEmojis = true, cta = 'None' } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '') {
+    return res.status(400).json({ error: 'Gemini API Key is not configured on the server.' });
+  }
+
+  if (!topic || topic.trim() === '') {
+    return res.status(400).json({ error: 'Post topic / objective is required.' });
+  }
+
+  try {
+    const prompt = `
+You are an expert LinkedIn content creator and professional ghostwriter.
+Candidate Resume details (use this context to personalize details in the post if relevant to their background):
+"${resumeText || ''}"
+
+Post Topic / Goal:
+"${topic}"
+
+Formatting Parameters:
+1. Tone: "${tone}" (e.g. Professional, Casual, Inspiring, Assertive, Humorous)
+2. Hook style: "${hookStyle}" (e.g. Question, Bold statement, Story opening, Statistic)
+3. Emojis enabled: ${useEmojis ? 'Yes (include rich, professional emojis throughout)' : 'No (strictly do not include emojis)'}
+4. Call to Action (CTA): "${cta}" (e.g. 'Let\'s connect', 'Read my blog', 'Leave a comment', 'None')
+
+Task:
+1. Write a highly engaging LinkedIn post based on the topic.
+2. The hook must grab the reader's attention instantly in the first 2 lines.
+3. Break the post into short paragraphs or bullet lists for readability.
+4. Keep the total length around 100 to 200 words.
+5. End with the specified Call to Action (CTA) if it is not 'None'.
+6. Generate 3-5 high-engagement hashtags at the bottom.
+7. Return ONLY a JSON object matching the schema below. No markdown wrappers.
+
+JSON Schema output:
+{
+  "post": "string containing the full LinkedIn post text with newlines"
+}
+`;
+
+    console.log('[Server] Generating LinkedIn Post with Gemini...');
+    const result = await callGemini(prompt, apiKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Gemini LinkedIn post generation failed:', error);
+    res.status(500).json({ error: 'Failed to generate LinkedIn post: ' + error.message });
+  }
+};
+

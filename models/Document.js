@@ -12,7 +12,7 @@ const documentSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['cover_letter', 'linkedin'],
+    enum: ['cover_letter', 'linkedin', 'linkedin_post'],
     required: true
   },
   userId: {
