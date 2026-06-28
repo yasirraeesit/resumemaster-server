@@ -1,5 +1,5 @@
 import express from 'express';
-import { enhanceBullet, suggestBullets, generateSummary } from '../controllers/aiController.js';
+import { enhanceBullet, suggestBullets, generateSummary, tailorResume } from '../controllers/aiController.js';
 
 const router = express.Router();
 
@@ -11,5 +11,8 @@ router.post('/ai/suggest', suggestBullets);
 
 // Route: Generate tailored professional summary
 router.post('/ai/generate-summary', generateSummary);
+
+// Route: Tailor whole resume data according to JD
+router.post('/ai/tailor-resume', tailorResume);
 
 export default router;

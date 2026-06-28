@@ -186,3 +186,96 @@ JSON Schema output:
   // Fallback response
   res.json({ summary: backupSummary });
 };
+
+/**
+ * Endpoint: Tailor full resume data to target Job Description using Gemini
+ */
+export const tailorResume = async (req, res) => {
+  const { resumeData, jobDescription } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '') {
+    return res.status(400).json({ error: 'Gemini API Key is not configured on the server.' });
+  }
+
+  if (!resumeData || !jobDescription || jobDescription.trim() === '') {
+    return res.status(400).json({ error: 'Both resumeData and target jobDescription are required.' });
+  }
+
+  try {
+    const prompt = `
+You are a senior professional resume writer and career coach.
+Review the candidate's current resume data in JSON format:
+${JSON.stringify(resumeData)}
+
+And review the target Job Description:
+"${jobDescription}"
+
+Task:
+1. Review the entire resume and the job description.
+2. Tailor the professional summary to match the core expectations of the role.
+3. Tailor the work experience bullet points (descriptions) and project bullet points (descriptions) to highlight technical skills, frameworks, achievements, and responsibilities that directly align with the job description. Do not invent fictitious job history, but optimize the terminology, emphasize matching tech stack details, and use action verbs with X-Y-Z outcomes.
+4. Keep the other structural fields (personalInfo, skills list, dates, company names, etc.) intact but make sure any tailored fields have their values updated.
+5. Return the entire modified resume JSON object.
+6. Do not include markdown code block formats in the output. Return ONLY the JSON object.
+
+The output JSON structure MUST match the input resume schema exactly, containing:
+{
+  "personalInfo": {
+    "fullName": "string",
+    "title": "string",
+    "email": "string",
+    "phone": "string",
+    "location": "string",
+    "website": "string",
+    "github": "string",
+    "linkedin": "string"
+  },
+  "summary": "tailored summary",
+  "skills": [ "string" ],
+  "experience": [
+    {
+      "company": "string",
+      "role": "string",
+      "location": "string",
+      "startDate": "string",
+      "endDate": "string",
+      "description": "tailored description bullets starting with •"
+    }
+  ],
+  "education": [
+    {
+      "school": "string",
+      "degree": "string",
+      "fieldOfStudy": "string",
+      "startDate": "string",
+      "endDate": "string",
+      "description": "string"
+    }
+  ],
+  "projects": [
+    {
+      "name": "string",
+      "description": "tailored description bullets starting with •",
+      "url": "string"
+    }
+  ],
+  "sections": [ "string" ],
+  "customSections": {
+    "sectionKey": {
+      "title": "string",
+      "items": [ "string" ]
+    }
+  }
+}
+`;
+
+    console.log('[Server] Tailoring resume with Gemini...');
+    const result = await callGemini(prompt, apiKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Gemini resume tailoring failed:', error);
+    res.status(500).json({ error: 'Failed to tailor resume: ' + error.message });
+  }
+};
+
