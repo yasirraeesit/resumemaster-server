@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import authRoutes from './routes/authRoutes.js';
 import resumeRoutes from './routes/resumeRoutes.js';
-import matcherRoutes from './routes/matcherRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
 import documentRoutes from './routes/documentRoutes.js';
@@ -50,7 +49,6 @@ app.get('/health', (req, res) => {
 // Route registration
 app.use('/api', authRoutes);
 app.use('/api', resumeRoutes);
-app.use('/api', matcherRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', careerRoutes);
 app.use('/api', documentRoutes);
